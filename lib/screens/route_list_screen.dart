@@ -42,24 +42,51 @@ class _RouteListScreenState extends State<RouteListScreen> {
     ).showSnackBar(SnackBar(content: Text('Report submitted: $issue')));
   }
 
+  void _showReportDialog(BuildContext context, TransitRoute route) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Report: ${route.name}'),
+          content: const Text('What went wrong?'),
+          actions: [
+            TextButton(
+              onPressed: () => _submitReport(route.name, 'Overcharging'),
+              child: const Text('Overcharging'),
+            ),
+            TextButton(
+              onPressed: () => _submitReport(route.name, 'No-show'),
+              child: const Text('No-show'),
+            ),
+            TextButton(
+              onPressed: () => _submitReport(route.name, 'Unsafe driving'),
+              child: const Text('Unsafe driving'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SmartTransitZW'),
+        title: Text(widget.isOperator ? 'Operator View' : 'Commuter View'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.list_alt),
-            tooltip: 'View reports',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ReportsScreen(reports: reports),
-                ),
-              );
-            },
-          ),
+          if (!widget.isOperator)
+            IconButton(
+              icon: const Icon(Icons.list_alt),
+              tooltip: 'View reports',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ReportsScreen(reports: reports),
+                  ),
+                );
+              },
+            ),
         ],
       ),
       body: ListView.builder(
@@ -96,49 +123,25 @@ class _RouteListScreenState extends State<RouteListScreen> {
                   backgroundColor: statusColor.withValues(alpha: 0.2),
                   labelStyle: TextStyle(color: statusColor),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.flag_outlined),
-                  tooltip: 'Report issue',
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: Text('Report: ${route.name}'),
-                          content: const Text('What went wrong?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () =>
-                                  _submitReport(route.name, 'Overcharging'),
-                              child: const Text('Overcharging'),
-                            ),
-                            TextButton(
-                              onPressed: () =>
-                                  _submitReport(route.name, 'No-show'),
-                              child: const Text('No-show'),
-                            ),
-                            TextButton(
-                              onPressed: () =>
-                                  _submitReport(route.name, 'Unsafe driving'),
-                              child: const Text('Unsafe driving'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                ),
+                if (!widget.isOperator)
+                  IconButton(
+                    icon: const Icon(Icons.flag_outlined),
+                    tooltip: 'Report issue',
+                    onPressed: () => _showReportDialog(context, route),
+                  ),
               ],
             ),
-            onTap: () {
-              setState(() {
-                routes[index] = TransitRoute(
-                  name: route.name,
-                  fare: route.fare,
-                  status: route.status.next(),
-                );
-              });
-            },
+            onTap: widget.isOperator
+                ? () {
+                    setState(() {
+                      routes[index] = TransitRoute(
+                        name: route.name,
+                        fare: route.fare,
+                        status: route.status.next(),
+                      );
+                    });
+                  }
+                : null,
           );
         },
       ),
