@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "705080367622",
+    "project_id": "smarttransitzw",
+    "storage_bucket": "smarttransitzw.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:705080367622:android:c32c59488082a2a3058187",
+        "android_client_info": {
+          "package_name": "com.example.smarttransitzw"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDFzJ6uXnFGrcsgW4RwQ5f7qd5wen8RU-E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
