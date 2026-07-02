@@ -13,14 +13,13 @@ class RouteListScreen extends StatefulWidget {
 }
 
 class _RouteListScreenState extends State<RouteListScreen> {
-  // Step 1: fake data, just to see something on screen.
-  final List<String> reports = [];
-
   void _submitReport(String routeName, String issue) {
-    setState(() {
-      reports.add('$issue on $routeName');
+    FirebaseFirestore.instance.collection('reports').add({
+      'routeName': routeName,
+      'issue': issue,
+      'timestamp': FieldValue.serverTimestamp(),
     });
-    Navigator.pop(context); // close the dialog
+    Navigator.pop(context);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Report submitted: $issue')));
@@ -66,7 +65,7 @@ class _RouteListScreenState extends State<RouteListScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ReportsScreen(reports: reports),
+                    builder: (context) => const ReportsScreen(),
                   ),
                 );
               },
