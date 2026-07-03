@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -13,6 +12,7 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _companyController = TextEditingController();
   String _selectedRole = 'commuter'; // default choice
   bool _isLoading = false;
 
@@ -46,11 +46,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
           .collection('users')
           .doc(credential.user!.uid)
           .set({'email': email, 'role': _selectedRole});
-
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Account created successfully!'),
+          backgroundColor: Colors.green,
+        ),
       );
     } on FirebaseAuthException catch (e) {
       _showToast(e.message ?? 'Registration failed.');
