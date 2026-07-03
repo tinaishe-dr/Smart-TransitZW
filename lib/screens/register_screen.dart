@@ -25,6 +25,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _register() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
+    final company = _companyController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       _showToast('Please fill in both email and password.');
@@ -34,6 +35,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _showToast('Password must be at least 6 characters.');
       return;
     }
+    if (_selectedRole == 'operator' && company.isEmpty) {
+      _showToast('Please enter your company name.');
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -41,18 +46,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final credential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
-      // Save their chosen role, linked to their new account's unique ID.
       await FirebaseFirestore.instance
           .collection('users')
           .doc(credential.user!.uid)
-          .set({'email': email, 'role': _selectedRole});
+          .set({
+            'email': email,
+            'role': _selectedRole,
+            if (_selectedRole == 'operator') 'company': company,
+          });
+
+      await FirebaseAuth.instance.signOut();
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Account created successfully!'),
+          content: Text('Account created! Please log in.'),
           backgroundColor: Colors.green,
         ),
       );
+      Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
       _showToast(e.message ?? 'Registration failed.');
     } finally {
@@ -104,6 +116,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ],
                 ),
               ),
+              if (_selectedRole == 'operator') ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _companyController,
+                  decoration: const InputDecoration(labelText: 'Company name'),
+                ),
+              ],
               const SizedBox(height: 24),
               if (_isLoading)
                 const CircularProgressIndicator()

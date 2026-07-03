@@ -4,6 +4,7 @@ import 'reports_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'add_route_screen.dart';
+import 'edit_fare_screen.dart';
 
 class RouteListScreen extends StatefulWidget {
   final bool isOperator;
@@ -15,6 +16,8 @@ class RouteListScreen extends StatefulWidget {
 }
 
 class _RouteListScreenState extends State<RouteListScreen> {
+  bool _sortByFare = false;
+
   void _submitReport(String routeName, String issue) {
     FirebaseFirestore.instance.collection('reports').add({
       'routeName': routeName,
@@ -53,6 +56,47 @@ class _RouteListScreenState extends State<RouteListScreen> {
     );
   }
 
+  Future<bool> _confirmDeleteReturnsBool(
+    BuildContext context,
+    TransitRoute route,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete route?'),
+          content: Text('This will permanently remove "${route.name}".'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await FirebaseFirestore.instance
+          .collection('routes')
+          .doc(route.id)
+          .delete();
+      return true;
+    }
+    return false;
+  }
+
+  void _openEditFare(BuildContext context, TransitRoute route) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => EditFareScreen(route: route)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -72,6 +116,13 @@ class _RouteListScreenState extends State<RouteListScreen> {
                 );
               },
             ),
+          IconButton(
+            icon: Icon(_sortByFare ? Icons.sort : Icons.sort_by_alpha),
+            tooltip: 'Sort by fare',
+            onPressed: () {
+              setState(() => _sortByFare = !_sortByFare);
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Log out',
@@ -111,11 +162,15 @@ class _RouteListScreenState extends State<RouteListScreen> {
               doc.data() as Map<String, dynamic>,
             );
           }).toList();
-
+          if (_sortByFare) {
+            routes.sort((a, b) => a.fare.compareTo(b.fare));
+          }
           return ListView.builder(
             itemCount: routes.length,
             itemBuilder: (context, index) {
               final route = routes[index];
+              final currentUid = FirebaseAuth.instance.currentUser?.uid;
+              final isOwner = route.ownerId == currentUid;
 
               Color statusColor;
               String statusLabel;
@@ -134,33 +189,125 @@ class _RouteListScreenState extends State<RouteListScreen> {
                   break;
               }
 
-              return ListTile(
-                title: Text(route.name),
-                subtitle: Text('Fare: \$${route.fare.toStringAsFixed(2)}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Chip(
-                      label: Text(statusLabel),
-                      backgroundColor: statusColor.withValues(alpha: 0.2),
-                      labelStyle: TextStyle(color: statusColor),
-                    ),
-                    if (!widget.isOperator)
-                      IconButton(
-                        icon: const Icon(Icons.flag_outlined),
-                        tooltip: 'Report issue',
-                        onPressed: () => _showReportDialog(context, route),
-                      ),
-                  ],
-                ),
-                onTap: widget.isOperator
-                    ? () {
-                        FirebaseFirestore.instance
-                            .collection('routes')
-                            .doc(route.id)
-                            .update({'status': route.status.next().name});
+              final canManage = widget.isOperator && isOwner;
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('routes')
+                    .doc(route.id)
+                    .collection('passengers')
+                    .snapshots(),
+                builder: (context, passengerSnapshot) {
+                  final passengerDocs = passengerSnapshot.data?.docs ?? [];
+                  final onboardCount = passengerDocs.length;
+                  final currentUid = FirebaseAuth.instance.currentUser?.uid;
+                  final isOnboard = passengerDocs.any(
+                    (doc) => doc.id == currentUid,
+                  );
+                  final seatsLeft = route.capacity - onboardCount;
+
+                  return Dismissible(
+                    key: Key(route.id),
+                    direction: canManage
+                        ? DismissDirection.horizontal
+                        : DismissDirection.none,
+                    confirmDismiss: (direction) async {
+                      if (direction == DismissDirection.endToStart) {
+                        return await _confirmDeleteReturnsBool(context, route);
+                      } else {
+                        _openEditFare(context, route);
+                        return false;
                       }
-                    : null,
+                    },
+                    background: Container(
+                      color: Colors.blue,
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.only(left: 20),
+                      child: const Icon(Icons.edit, color: Colors.white),
+                    ),
+                    secondaryBackground: Container(
+                      color: Colors.red,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    child: Opacity(
+                      opacity: widget.isOperator && !isOwner ? 0.5 : 1.0,
+                      child: ListTile(
+                        title: Text(route.name),
+                        subtitle: Text(
+                          'Fare: \$${route.fare.toStringAsFixed(2)} • '
+                          '$onboardCount/${route.capacity} onboard'
+                          '${route.ownerId != null && !isOwner ? " • ${route.company ?? "Unknown company"}" : ""}',
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Chip(
+                              label: Text(statusLabel),
+                              backgroundColor: statusColor.withValues(
+                                alpha: 0.2,
+                              ),
+                              labelStyle: TextStyle(color: statusColor),
+                            ),
+                            if (widget.isOperator && !isOwner)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Icon(Icons.lock_outline, size: 18),
+                              ),
+                            if (!widget.isOperator)
+                              IconButton(
+                                icon: Icon(
+                                  isOnboard
+                                      ? Icons.directions_bus
+                                      : Icons.directions_bus_outlined,
+                                  color: isOnboard ? Colors.green : null,
+                                ),
+                                tooltip: isOnboard
+                                    ? 'Leave route'
+                                    : 'Board route',
+                                onPressed: seatsLeft <= 0 && !isOnboard
+                                    ? null
+                                    : () {
+                                        final passengerRef = FirebaseFirestore
+                                            .instance
+                                            .collection('routes')
+                                            .doc(route.id)
+                                            .collection('passengers')
+                                            .doc(currentUid);
+
+                                        if (isOnboard) {
+                                          passengerRef.delete();
+                                        } else {
+                                          passengerRef.set({
+                                            'boardedAt':
+                                                FieldValue.serverTimestamp(),
+                                          });
+                                        }
+                                      },
+                              ),
+                            if (!widget.isOperator)
+                              IconButton(
+                                icon: const Icon(Icons.flag_outlined),
+                                tooltip: 'Report issue',
+                                onPressed: () =>
+                                    _showReportDialog(context, route),
+                              ),
+                          ],
+                        ),
+                        onTap: canManage
+                            ? () {
+                                FirebaseFirestore.instance
+                                    .collection('routes')
+                                    .doc(route.id)
+                                    .update({
+                                      'status': route.status.next().name,
+                                    });
+                              }
+                            : null,
+                      ),
+                    ),
+                  );
+                },
               );
             },
           );

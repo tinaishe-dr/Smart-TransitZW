@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AddRouteScreen extends StatefulWidget {
   const AddRouteScreen({super.key});
@@ -9,6 +10,7 @@ class AddRouteScreen extends StatefulWidget {
 }
 
 class _AddRouteScreenState extends State<AddRouteScreen> {
+  final _capacityController = TextEditingController();
   final _nameController = TextEditingController();
   final _fareController = TextEditingController();
   bool _isSaving = false;
@@ -25,6 +27,12 @@ class _AddRouteScreenState extends State<AddRouteScreen> {
   Future<void> _saveRoute() async {
     final name = _nameController.text.trim();
     final fareText = _fareController.text.trim();
+    final capacityText = _capacityController.text.trim();
+    final capacity = int.tryParse(capacityText);
+    if (capacity == null || capacity <= 0) {
+      _showToast('Please enter a valid capacity.');
+      return;
+    }
 
     if (name.isEmpty || fareText.isEmpty) {
       _showToast('Please fill in both fields.');
@@ -40,10 +48,20 @@ class _AddRouteScreenState extends State<AddRouteScreen> {
     setState(() => _isSaving = true);
 
     try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final company = userDoc.data()?['company'] as String? ?? 'Unknown';
+
       await FirebaseFirestore.instance.collection('routes').add({
         'name': name,
         'fare': fare,
         'status': 'active',
+        'company': company,
+        'ownerId': uid,
+        'capacity': capacity,
       });
       if (!mounted) return;
       Navigator.pop(context);
@@ -77,6 +95,14 @@ class _AddRouteScreenState extends State<AddRouteScreen> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _capacityController,
+                decoration: const InputDecoration(
+                  labelText: 'Vehicle capacity (seats)',
+                ),
+                keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 24),
               if (_isSaving)
