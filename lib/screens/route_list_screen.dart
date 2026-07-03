@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/route_model.dart';
 import 'reports_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'add_route_screen.dart';
 
 class RouteListScreen extends StatefulWidget {
   final bool isOperator;
@@ -70,8 +72,29 @@ class _RouteListScreenState extends State<RouteListScreen> {
                 );
               },
             ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Log out',
+            onPressed: () {
+              FirebaseAuth.instance.signOut();
+            },
+          ),
         ],
       ),
+      floatingActionButton: widget.isOperator
+          ? FloatingActionButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AddRouteScreen(),
+                  ),
+                );
+              },
+              tooltip: 'Add Route',
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('routes').snapshots(),
         builder: (context, snapshot) {
