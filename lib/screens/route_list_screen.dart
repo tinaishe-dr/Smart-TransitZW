@@ -97,6 +97,50 @@ class _RouteListScreenState extends State<RouteListScreen> {
     );
   }
 
+  void _confirmLeave(
+    BuildContext context,
+    TransitRoute route,
+    String uid,
+    int onboardCount,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Leave this route?'),
+          content: const Text('You will no longer be marked as onboard.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Stay onboard'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await FirebaseFirestore.instance
+                    .collection('routes')
+                    .doc(route.id)
+                    .collection('passengers')
+                    .doc(uid)
+                    .delete();
+
+                if (route.status == RouteStatus.full &&
+                    onboardCount - 1 < route.capacity) {
+                  await FirebaseFirestore.instance
+                      .collection('routes')
+                      .doc(route.id)
+                      .update({'status': 'active'});
+                }
+
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('Leave', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -260,30 +304,69 @@ class _RouteListScreenState extends State<RouteListScreen> {
                                   isOnboard
                                       ? Icons.directions_bus
                                       : Icons.directions_bus_outlined,
-                                  color: isOnboard ? Colors.green : null,
+                                  color: isOnboard
+                                      ? Colors.green
+                                      : (seatsLeft <= 0 ||
+                                            route.status != RouteStatus.active)
+                                      ? Colors.grey
+                                      : null,
                                 ),
                                 tooltip: isOnboard
                                     ? 'Leave route'
                                     : 'Board route',
-                                onPressed: seatsLeft <= 0 && !isOnboard
-                                    ? null
-                                    : () {
-                                        final passengerRef = FirebaseFirestore
-                                            .instance
-                                            .collection('routes')
-                                            .doc(route.id)
-                                            .collection('passengers')
-                                            .doc(currentUid);
+                                onPressed: () {
+                                  if (isOnboard) {
+                                    _confirmLeave(
+                                      context,
+                                      route,
+                                      currentUid!,
+                                      onboardCount,
+                                    );
+                                    return;
+                                  }
 
-                                        if (isOnboard) {
-                                          passengerRef.delete();
-                                        } else {
-                                          passengerRef.set({
-                                            'boardedAt':
-                                                FieldValue.serverTimestamp(),
-                                          });
-                                        }
-                                      },
+                                  if (route.status != RouteStatus.active) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'This vehicle is currently off. Cannot board.',
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  if (seatsLeft <= 0) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'This vehicle is full. Cannot board.',
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  final passengerRef = FirebaseFirestore
+                                      .instance
+                                      .collection('routes')
+                                      .doc(route.id)
+                                      .collection('passengers')
+                                      .doc(currentUid);
+
+                                  passengerRef.set({
+                                    'boardedAt': FieldValue.serverTimestamp(),
+                                  });
+
+                                  if (onboardCount + 1 >= route.capacity) {
+                                    FirebaseFirestore.instance
+                                        .collection('routes')
+                                        .doc(route.id)
+                                        .update({'status': 'full'});
+                                  }
+                                },
                               ),
                             if (!widget.isOperator)
                               IconButton(
