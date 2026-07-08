@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'app_drawer.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
@@ -28,6 +29,17 @@ class AdminDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      drawer: AppDrawer(
+        roleLabel: 'Admin',
+        items: [
+          AppDrawerItem(
+            icon: Icons.dashboard_outlined,
+            label: 'Dashboard',
+            selected: true,
+            onTap: () {},
+          ),
+        ],
+      ),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(

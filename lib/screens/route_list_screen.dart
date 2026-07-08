@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'add_route_screen.dart';
 import 'edit_fare_screen.dart';
+import 'app_drawer.dart';
 
 class RouteListScreen extends StatefulWidget {
   final bool isOperator;
@@ -251,6 +252,48 @@ class _RouteListScreenState extends State<RouteListScreen> {
 
     return Scaffold(
       backgroundColor: _bg,
+      drawer: AppDrawer(
+        roleLabel: widget.isOperator ? 'Operator' : 'Commuter',
+        items: [
+          AppDrawerItem(
+            icon: Icons.dashboard_outlined,
+            label: 'Dashboard',
+            selected: true,
+            onTap: () {},
+          ),
+          if (widget.isOperator)
+            AppDrawerItem(
+              icon: Icons.add_road,
+              label: 'Add Route',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AddRouteScreen(),
+                  ),
+                );
+              },
+            ),
+          if (!widget.isOperator)
+            AppDrawerItem(
+              icon: Icons.list_alt,
+              label: 'My Reports',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ReportsScreen(),
+                  ),
+                );
+              },
+            ),
+          AppDrawerItem(
+            icon: Icons.attach_money,
+            label: 'Sort by Fare',
+            onTap: () => setState(() => _sortByFare = !_sortByFare),
+          ),
+        ],
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('routes').snapshots(),
         builder: (context, snapshot) {
