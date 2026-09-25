@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function self(uid) { return signedIn() && request.auth.uid == uid; }
+    function role(value) {
+      return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == value;
+    }
+    function admin() { return role('admin'); }
+    function validRoute(d) {
+      return d.keys().hasOnly(['name', 'origin', 'destination', 'vehicle', 'fare', 'capacity', 'company', 'notice', 'status', 'departureAt', 'ownerId', 'onboard', 'archived', 'updatedAt'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 100
+        && d.origin is string && d.origin.size() > 0 && d.origin.size() <= 100
+        && d.destination is string && d.destination.size() > 0 && d.destination.size() <= 100
+        && d.vehicle is string && d.vehicle.size() > 0 && d.vehicle.size() <= 20
+        && d.company is string && d.company.size() <= 100
+        && d.notice is string && d.notice.size() <= 300
+        && d.fare is number && d.fare > 0 && d.fare <= 1000
+        && d.capacity is int && d.capacity >= 1 && d.capacity <= 100
+        && d.onboard is int && d.onboard >= 0 && d.onboard <= d.capacity
+        && d.status in ['active', 'off', 'full'] && d.archived is bool
+        && (d.departureAt == null || d.departureAt is timestamp)
+        && d.updatedAt is timestamp && d.ownerId is string;
+    }
+    match /users/{uid} {
+      allow read: if self(uid);
+      allow create: if self(uid)
+        && request.resource.data.keys().hasOnly(['email', 'role', 'company'])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['commuter', 'operator']
+        && request.resource.data.company is string && request.resource.data.company.size() <= 100
+        && (request.resource.data.role != 'operator' || request.resource.data.company.size() > 0);
+      allow update, delete: if false;
+      match /saved/{routeId} {
+        allow read, delete: if self(uid);
+        allow create, update: if self(uid) && request.resource.data.keys().hasOnly(['createdAt'])
+          && request.resource.data.createdAt == request.time;
+      }
+    }
+    match /routes/{routeId} {
+      allow read: if signedIn();
+      allow create: if role('operator') && validRoute(request.resource.data)
+        && request.resource.data.ownerId == request.auth.uid && request.resource.data.onboard == 0
+        && request.resource.data.updatedAt == request.time && request.resource.data.archived == false;
+      allow update: if (
+        role('operator') && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.onboard == resource.data.get('onboard', 0)
+        && validRoute(request.resource.data) && request.resource.data.updatedAt == request.time
+        && (!request.resource.data.archived || request.resource.data.onboard == 0)
+      ) || passengerCountChange(routeId);
+      allow delete: if false;
+      function passengerCountChange(id) {
+        let journey = /databases/$(database)/documents/journeys/$(request.auth.uid);
+        let before = resource.data.get('onboard', 0);
+        let after = request.resource.data.onboard;
+        return role('commuter')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['onboard'])
+          && after is int && after >= 0 && after <= resource.data.capacity
+          && ((after == before + 1 && resource.data.keys().hasAll(['onboard']) && resource.data.status == 'active'
+                && resource.data.get('archived', false) == false
+                && !exists(journey) && getAfter(journey).data.routeId == id)
+            || (after == before - 1 && exists(journey) && get(journey).data.routeId == id
+                && !existsAfter(journey)));
+      }
+    }
+    match /journeys/{uid} {
+      allow read: if self(uid);
+      allow create: if self(uid) && role('commuter') && validBoarding();
+      allow delete: if self(uid) && validLeaving();
+      allow update: if false;
+      function validBoarding() {
+        let d = request.resource.data;
+        let routePath = /databases/$(database)/documents/routes/$(d.routeId);
+        let route = get(routePath).data;
+        return d.keys().hasOnly(['routeId', 'routeName', 'fare', 'boardedAt'])
+          && route.keys().hasAll(['onboard']) && route.status == 'active' && route.get('archived', false) == false
+          && route.get('onboard', 0) < route.capacity
+          && d.routeName == route.name && d.fare == route.fare && d.boardedAt == request.time
+          && getAfter(routePath).data.onboard == route.get('onboard', 0) + 1;
+      }
+      function validLeaving() {
+        let routePath = /databases/$(database)/documents/routes/$(resource.data.routeId);
+        return getAfter(routePath).data.onboard == get(routePath).data.onboard - 1;
+      }
+    }
+    match /reports/{reportId} {
+      allow read: if signedIn() && (admin() || resource.data.userId == request.auth.uid);
+      allow create: if role('commuter')
+        && request.resource.data.keys().hasOnly(['routeId', 'routeName', 'userId', 'issue', 'details', 'status', 'timestamp'])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.routeName == get(/databases/$(database)/documents/routes/$(request.resource.data.routeId)).data.name
+        && request.resource.data.issue in ['Unsafe driving', 'Overcharging', 'No-show', 'Overcrowding', 'Other']
+        && request.resource.data.details is string && request.resource.data.details.size() <= 1000
+        && request.resource.data.status == 'open' && request.resource.data.timestamp == request.time;
+      allow update: if admin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt'])
+        && request.resource.data.status in ['open', 'resolved']
+        && ((request.resource.data.status == 'resolved' && request.resource.data.resolvedAt == request.time)
+          || (request.resource.data.status == 'open' && request.resource.data.resolvedAt == null));
+      allow delete: if false;
+    }
+  }
+}
