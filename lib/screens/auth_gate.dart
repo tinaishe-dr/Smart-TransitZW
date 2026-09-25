@@ -1,26 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'home_screen.dart';
-import 'login_screen.dart';
+import '../features/account_screen.dart';
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasData) {
-          return const HomeScreen();
-        }
-        return const LoginScreen();
-      },
-    );
-  }
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final _auth = FirebaseAuth.instance.authStateChanges();
+  @override
+  Widget build(BuildContext context) => StreamBuilder<User?>(
+    stream: _auth,
+    builder: (context, state) {
+      if (state.connectionState == ConnectionState.waiting) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+      return state.data == null
+          ? const AccountScreen()
+          : HomeScreen(key: ValueKey(state.data!.uid), uid: state.data!.uid);
+    },
+  );
 }
